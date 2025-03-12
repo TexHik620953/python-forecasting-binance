@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="Black">
+    <option name="sdkName" value="Remote Python 3.11.0rc1 Docker (tensorflow/tensorflow:latest-gpu)" />
+  </component>
+  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.12.3 WSL (Ubuntu): (/home/texhik/.virtualenvs/python-forecasting-binance/bin/python)" project-jdk-type="Python SDK" />
+</project>
