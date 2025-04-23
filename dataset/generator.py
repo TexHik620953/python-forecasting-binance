@@ -1,51 +1,63 @@
+import os
+
 import numpy as np
-from fontTools.misc.cython import returns
+import random
+from collections import deque
 
 
 class Dataset:
     def __init__(self):
-        self.data = np.load("./dataset/data.npy").swapaxes(1, 0)
-        self.window_size = 512
-        self.next_window_size = 60
+        data_parts = []
+        for file in os.listdir("./dataset"):
+            if file.endswith(".npy"):
+                data_parts.append(os.path.join("./dataset", file))
+        data_parts = sorted(data_parts)
+        self.validation_part = [data_parts[0]]
+        self.test_part = data_parts[1]
+        self.data_parts = data_parts[2:]
+        print()
 
-        valudation_split = 0.1
-        test_split = 0.1
-        datalen = self.data.shape[0]
+    def __generate_data(self, filename):
+        f = np.load(filename, allow_pickle=True)
+        x = f.item()['x']
+        y = f.item()['y']
+        for i in range(len(x)):
+            _x, _y = x[i], y[i]
 
-        self.validation_data = self.data[int(datalen*(1-valudation_split)):]
-        self.test_data = self.data[int(datalen * (1 - valudation_split - test_split)):int(datalen*(1-valudation_split))]
-        self.train_data = self.data[:int(datalen * (1 - valudation_split - test_split))]
+            if np.isnan(_x).any() or np.isnan(_y).any():
+                continue
 
-    def normalize_window(self, window):
-        std = window.std(axis=0)
-        mean = window.mean(axis=0)
-        return (window - mean) / (std + 1e-6)
+            l = None
+            if abs(_y) < 0.2/100: # 0.2%
+                l = [0, 1, 0]
+            else:
+                if _y > 0:
+                    l = [0, 0, 1]
+                else:
+                    l = [1, 0, 0]
 
-    def generate_dataset(self, dataset, batch_size=500):
-        # OPEN HIGH LOW CLOSE VOLUME QUOTE_VOLUME NUMBER_OF TRADES TAKER_VOLUME TAKER_QUOTE_VOLUME
-        x = []
-        y = []
-        for i in range(dataset.shape[0] - self.window_size):
-            _x = dataset[i:i+self.window_size].reshape(self.window_size,-1)
-            x.append(self.normalize_window(_x))
+            yield _x, l
 
-            current_closes = dataset[i+self.window_size-1][1, 3] # Close
+    def get_train_generator(self, batch_size=500):
+        X, Y = [], []
+        for f in self.data_parts:
+            for x, y in self.__generate_data(f):
 
-            next_window = dataset[i+self.window_size: i+self.window_size+self.next_window_size]
-            next_window_low = np.min(next_window[:,1, 2], axis=0)
-            next_window_high = np.max(next_window[:,1, 1], axis=0)
+                X.append(x)
+                Y.append(y)
+                if len(X) >= batch_size:
+                    yield np.array(X), np.array(Y)
+                    X, Y = [], []
+        if len(X) > 0:
+            yield np.array(X), np.array(Y)
 
-            max_raise = (next_window_high - current_closes) / current_closes
-            max_drop = (current_closes - next_window_low) / current_closes
-
-            _y = np.array([max_drop, max_raise])
-            _y = _y / (np.sum(_y) + 1e-6)
-
-            y.append(_y)
-
-            if len(x) == batch_size:
-                yield np.array(x), np.array(y)
-                x = []
-                y = []
-        if len(x) == batch_size:
-            yield np.array(x), np.array(y)
+    def get_test_generator(self, batch_size=500):
+        X, Y = [], []
+        for x, y in self.__generate_data(self.test_part):
+            X.append(x)
+            Y.append(y)
+            if len(X) >= batch_size:
+                yield np.array(X), np.array(Y)
+                X, Y = [], []
+        if len(X) > 0:
+            yield np.array(X), np.array(Y)
